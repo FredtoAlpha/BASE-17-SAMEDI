@@ -120,6 +120,7 @@ function updateQuotasPanel(stats, structData) {
     const lv2Keys = Object.keys(quotas.lv2);
     const optKeys = Object.keys(quotas.options);
     
+    const lv2KeysUpper = lv2Keys.map(k => k.toUpperCase());
     lv2Keys.forEach(lv2 => {
         optKeys.forEach(opt => {
             const comboKey = `${lv2} + ${opt}`;
@@ -127,7 +128,28 @@ function updateQuotasPanel(stats, structData) {
             // CORRECTION : On additionne les places compatibles classe par classe
             let quotaMax = 0;
             (structData?.classes || []).forEach(cls => {
-                quotaMax += Math.min(parseInt(cls.quotas[lv2] || 0), parseInt(cls.quotas[opt] || 0));
+                const lv2Upper = lv2.toUpperCase();
+                const optUpper = opt.toUpperCase();
+                const quotasUpper = {};
+                Object.keys(cls.quotas || {}).forEach(k => {
+                    quotasUpper[k.toUpperCase()] = cls.quotas[k];
+                });
+
+                const qLv2 = parseInt(quotasUpper[lv2Upper] || 0);
+                const qOpt = parseInt(quotasUpper[optUpper] || 0);
+                if (qLv2 <= 0 || qOpt <= 0) return;
+
+                // Classe incompatible si une autre LV2 couvre l'option presque totalement
+                const hasConflictingLv2 = lv2KeysUpper.some(otherLv2 => {
+                    if (otherLv2 === lv2Upper) return false;
+                    const qOther = parseInt(quotasUpper[otherLv2] || 0);
+                    if (qOther <= 0) return false;
+                    const ratio = qOpt > 0 ? Math.min(qOther, qOpt) / qOpt : 0;
+                    return ratio >= 0.9; // parfait ou quasi-parfait
+                });
+                if (hasConflictingLv2) return;
+
+                quotaMax += Math.min(qLv2, qOpt);
             });
             const isComplete = count === quotaMax && quotaMax > 0;
             let barColor = count > quotaMax ? '#ef4444' : (isComplete ? '#22c55e' : '#eab308');

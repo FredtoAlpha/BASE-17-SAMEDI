@@ -1006,41 +1006,57 @@
             const qOpt = document.getElementById('quota-options');
             if(qOpt) qOpt.innerHTML = h;
 
-            // COMBOS - CORRECTION MATHÉMATIQUE DU BUG 19/11
+            // COMBOS - calcul stricte LV2 × Option sans agrégat cross-LV2
             h = '';
 
-            // Normalisation des clés pour éviter les inversions ou espaces parasites
-            const normalizedCombos = {};
-            Object.entries(s.combos || {}).forEach(([rawKey, value]) => {
-                const parts = rawKey.split('+').map(p => p.trim().toUpperCase());
-                if (parts.length === 2) {
-                    const key = `${parts[0]} + ${parts[1]}`;
-                    normalizedCombos[key] = (normalizedCombos[key] || 0) + (parseInt(value) || 0);
-                }
-            });
+            // Map normalisée des combos disponibles (évite tout mélange ESP/ITA)
+            const comboMap = {};
+            if (s.combos) {
+                Object.entries(s.combos).forEach(([key, value]) => {
+                    const [lv2Part, optPart] = String(key).split('+').map(p => p.trim().toUpperCase());
+                    if (!lv2Part || !optPart) return;
+                    comboMap[`${lv2Part} + ${optPart}`] = parseInt(value) || 0;
+                });
+            }
 
-            Object.entries(normalizedCombos).forEach(([k, demand]) => {
-                const parts = k.split('+').map(p => p.trim().toUpperCase());
-                if (parts.length !== 2) return;
+            // On parcourt explicitement chaque couple LV2/Option de la structure pour éviter tout cumul involontaire
+            const lv2ListUpper = (currentStructure.lv2 || []).map(c => String(c).trim().toUpperCase());
+            (currentStructure.lv2 || []).forEach(lv2Code => {
+                (currentStructure.options || []).forEach(optCode => {
+                    const lv2Upper = String(lv2Code).trim().toUpperCase();
+                    const optUpper = String(optCode).trim().toUpperCase();
+                    const demand = comboMap[`${lv2Upper} + ${optUpper}`] || 0;
+                    if (demand === 0) return; // n'afficher que les combos réellement présents
 
-                const lv2Code = parts[0];
-                const optCode = parts[1];
+                    // Intersection des quotas par classe (places réellement compatibles)
+                    let seats = 0;
+                    currentStructure.classes.forEach(cls => {
+                        const quotasUpper = {};
+                        Object.keys(cls.quotas).forEach(key => {
+                            quotasUpper[key.toUpperCase()] = cls.quotas[key];
+                        });
 
-                // Intersection des quotas par classe (places réellement compatibles)
-                let seats = 0;
-                currentStructure.classes.forEach(cls => {
-                    const quotasUpper = {};
-                    Object.keys(cls.quotas).forEach(key => {
-                        quotasUpper[key.toUpperCase()] = cls.quotas[key];
+                        const qLv2 = parseInt(quotasUpper[lv2Upper] || 0);
+                        const qOpt = parseInt(quotasUpper[optUpper] || 0);
+
+                        // Classe incompatible si une autre LV2 couvre (presque) tout l'option
+                        if (qLv2 <= 0 || qOpt <= 0) return;
+                        const hasConflictingLv2 = lv2ListUpper.some(otherLv2 => {
+                            if (otherLv2 === lv2Upper) return false;
+                            const qOther = parseInt(quotasUpper[otherLv2] || 0);
+                            if (qOther <= 0) return false;
+                            const ratio = qOpt > 0 ? Math.min(qOther, qOpt) / qOpt : 0;
+                            return ratio >= 0.9; // parfait ou quasi-parfait
+                        });
+                        if (hasConflictingLv2) return;
+
+                        seats += Math.min(qLv2, qOpt);
                     });
 
-                    const v1 = parseInt(quotasUpper[lv2Code] || 0);
-                    const v2 = parseInt(quotasUpper[optCode] || 0);
-                    seats += Math.min(v1, v2);
+                    h += renderComboRow(`${lv2Code} + ${optCode}`, demand, seats);
                 });
-
-                h += renderComboRow(k, demand, seats);
             });
+
             const qComb = document.getElementById('quota-combos');
             if(qComb) qComb.innerHTML = h || '<div style="color:#64748b;font-size:11px">Aucun</div>';
         }

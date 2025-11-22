@@ -124,7 +124,11 @@ function updateQuotasPanel(stats, structData) {
         optKeys.forEach(opt => {
             const comboKey = `${lv2} + ${opt}`;
             const count = stats.combos[comboKey] || 0;
-            const quotaMax = Math.min(quotas.lv2[lv2] || 0, quotas.options[opt] || 0);
+            // CORRECTION : On additionne les places compatibles classe par classe
+            let quotaMax = 0;
+            (structData?.classes || []).forEach(cls => {
+                quotaMax += Math.min(parseInt(cls.quotas[lv2] || 0), parseInt(cls.quotas[opt] || 0));
+            });
             const isComplete = count === quotaMax && quotaMax > 0;
             let barColor = count > quotaMax ? '#ef4444' : (isComplete ? '#22c55e' : '#eab308');
             let barWidth = quotaMax > 0 ? Math.min(100, (count / quotaMax) * 100) : 0;

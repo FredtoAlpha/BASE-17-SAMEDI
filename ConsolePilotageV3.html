@@ -589,21 +589,26 @@
         // ===================================================================
         window.onload = function() {
             console.log("🚀 Console Pilotage V3 chargée");
-            goTo(1); // Force l'affichage immédiat pour éviter l'écran blanc
+            toggleWelcomeModal(true); // Affiche immédiatement l'écran de choix
             initializeWelcomeFlow();
+            goTo(1); // Force l'affichage immédiat pour éviter l'écran blanc
         };
 
         async function initializeWelcomeFlow() {
+            const statusEl = document.getElementById('welcome-status');
+            const btnResume = document.getElementById('btn-resume-session');
+            if (statusEl) statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Vérification des sessions enregistrées...';
+
             try {
                 const status = await getSessionStatus();
-                const btnResume = document.getElementById('btn-resume-session');
                 if (btnResume) btnResume.style.display = status.hasBackup ? 'flex' : 'none';
-                
-                if (status.hasBackup) {
-                    toggleWelcomeModal(true);
-                }
+                if (statusEl) statusEl.innerHTML = status.hasBackup
+                    ? '<i class="fas fa-check-circle"></i> Session précédente détectée.'
+                    : '<i class="fas fa-info-circle"></i> Aucune session précédente trouvée. Démarrez une nouvelle configuration.';
             } catch (e) {
                 console.error("Erreur session", e);
+                if (btnResume) btnResume.style.display = 'none';
+                if (statusEl) statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Impossible de vérifier les sessions. Vous pouvez démarrer une nouvelle configuration.';
             }
         }
 
@@ -973,6 +978,22 @@
                 </div>`;
             };
 
+            const renderComboRow = (code, students, seats) => {
+                const demand = Math.max(0, parseInt(students) || 0);   // élèves
+                const offer = Math.max(0, parseInt(seats) || 0);        // places compatibles
+                let c = '#eab308';
+                if (demand === offer && offer > 0) c = '#22c55e';
+                else if (demand > offer) c = '#ef4444';
+                const w = offer > 0 ? Math.min(100, (demand / offer) * 100) : 0;
+                return `<div style="margin-bottom:5px;padding:5px;background:rgba(255,255,255,0.03);border-radius:4px">
+                    <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px">
+                        <span style="font-weight:bold;color:white">${code}</span>
+                        <span style="color:${c}">${demand} élèves / ${offer} places</span>
+                    </div>
+                    <div style="height:4px;background:#1e293b;border-radius:2px;overflow:hidden"><div style="width:${w}%;background:${c};height:100%"></div></div>
+                </div>`;
+            };
+
             // LV2
             let h = '';
             currentStructure.lv2.forEach(k => h += renderRow(k, targets[k] || 0, totals.counts[k] || 0));
@@ -985,38 +1006,57 @@
             const qOpt = document.getElementById('quota-options');
             if(qOpt) qOpt.innerHTML = h;
 
-            // COMBOS - CORRECTION MATHÉMATIQUE DU BUG 19/11
+            // COMBOS - calcul stricte LV2 × Option sans agrégat cross-LV2
             h = '';
+
+            // Map normalisée des combos disponibles (évite tout mélange ESP/ITA)
+            const comboMap = {};
             if (s.combos) {
-                Object.entries(s.combos).forEach(([k, demand]) => {
-                    // Split sur '+' et nettoyer les espaces et la casse
-                    const parts = k.split('+').map(p => p.trim().toUpperCase());
-
-                    if (parts.length === 2) {
-                        const m1 = parts[0]; // Première matière (ex: ESP)
-                        const m2 = parts[1]; // Deuxième matière (ex: LATIN)
-
-                        // ON CALCULE L'INTERSECTION PAR CLASSE
-                        let inter = 0;
-                        currentStructure.classes.forEach(cls => {
-                            // Normaliser les clés des quotas en majuscules pour la comparaison
-                            const quotasUpper = {};
-                            Object.keys(cls.quotas).forEach(key => {
-                                quotasUpper[key.toUpperCase()] = cls.quotas[key];
-                            });
-
-                            const v1 = parseInt(quotasUpper[m1] || 0);
-                            const v2 = parseInt(quotasUpper[m2] || 0);
-
-                            // Le nombre de places valides pour le couple est le minimum des deux
-                            // (On ne peut placer un élève ESP+LATIN que s'il y a des places ESP ET LATIN)
-                            inter += Math.min(v1, v2);
-                        });
-
-                        h += renderRow(k, demand, inter);
-                    }
+                Object.entries(s.combos).forEach(([key, value]) => {
+                    const [lv2Part, optPart] = String(key).split('+').map(p => p.trim().toUpperCase());
+                    if (!lv2Part || !optPart) return;
+                    comboMap[`${lv2Part} + ${optPart}`] = parseInt(value) || 0;
                 });
             }
+
+            // On parcourt explicitement chaque couple LV2/Option de la structure pour éviter tout cumul involontaire
+            const lv2ListUpper = (currentStructure.lv2 || []).map(c => String(c).trim().toUpperCase());
+            (currentStructure.lv2 || []).forEach(lv2Code => {
+                (currentStructure.options || []).forEach(optCode => {
+                    const lv2Upper = String(lv2Code).trim().toUpperCase();
+                    const optUpper = String(optCode).trim().toUpperCase();
+                    const demand = comboMap[`${lv2Upper} + ${optUpper}`] || 0;
+                    if (demand === 0) return; // n'afficher que les combos réellement présents
+
+                    // Intersection des quotas par classe (places réellement compatibles)
+                    let seats = 0;
+                    currentStructure.classes.forEach(cls => {
+                        const quotasUpper = {};
+                        Object.keys(cls.quotas).forEach(key => {
+                            quotasUpper[key.toUpperCase()] = cls.quotas[key];
+                        });
+
+                        const qLv2 = parseInt(quotasUpper[lv2Upper] || 0);
+                        const qOpt = parseInt(quotasUpper[optUpper] || 0);
+
+                        // Classe incompatible si une autre LV2 couvre (presque) tout l'option
+                        if (qLv2 <= 0 || qOpt <= 0) return;
+                        const hasConflictingLv2 = lv2ListUpper.some(otherLv2 => {
+                            if (otherLv2 === lv2Upper) return false;
+                            const qOther = parseInt(quotasUpper[otherLv2] || 0);
+                            if (qOther <= 0) return false;
+                            const ratio = qOpt > 0 ? Math.min(qOther, qOpt) / qOpt : 0;
+                            return ratio >= 0.9; // parfait ou quasi-parfait
+                        });
+                        if (hasConflictingLv2) return;
+
+                        seats += Math.min(qLv2, qOpt);
+                    });
+
+                    h += renderComboRow(`${lv2Code} + ${optCode}`, demand, seats);
+                });
+            });
+
             const qComb = document.getElementById('quota-combos');
             if(qComb) qComb.innerHTML = h || '<div style="color:#64748b;font-size:11px">Aucun</div>';
         }

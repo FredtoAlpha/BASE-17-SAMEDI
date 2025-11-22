@@ -122,7 +122,7 @@ function updateQuotasPanel(stats, structData) {
     
     lv2Keys.forEach(lv2 => {
         optKeys.forEach(opt => {
-            const comboKey = `${lv2}+${opt}`;
+            const comboKey = `${lv2} + ${opt}`;
             const count = stats.combos[comboKey] || 0;
             const quotaMax = Math.min(quotas.lv2[lv2] || 0, quotas.options[opt] || 0);
             const isComplete = count === quotaMax && quotaMax > 0;

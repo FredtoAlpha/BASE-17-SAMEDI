@@ -300,11 +300,11 @@
             <h2 class="modal-title">Bienvenue dans le Pilotage V3</h2>
             <p class="modal-message">Choisissez comment démarrer : reprendre une session existante ou repartir de zéro.</p>
             <div class="modal-buttons" style="gap: 10px;">
-                <button id="btn-resume-session" class="modal-btn modal-btn-primary" onclick="handleResumeSession()" style="display:none;">
-                    <i class="fas fa-history"></i> REPRENDRE LA SESSION
-                </button>
                 <button id="btn-new-config" class="modal-btn modal-btn-secondary" onclick="handleNewConfiguration()">
                     <i class="fas fa-plus-circle"></i> NOUVELLE CONFIGURATION
+                </button>
+                <button id="btn-resume-session" class="modal-btn modal-btn-primary" onclick="handleResumeSession()" style="display:none;">
+                    <i class="fas fa-history"></i> REPRENDRE LA SESSION
                 </button>
             </div>
             <div id="welcome-status" style="text-align:center;color:#94a3b8;margin-top:10px;font-size:13px;"></div>
@@ -676,10 +676,15 @@
         // 5. ACTIONS (Init, Conso, Session)
         // ===================================================================
         async function handleResumeSession() {
+            const statusEl = document.getElementById('welcome-status');
             setLoading('btn-resume-session', true);
+            if (statusEl) statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Chargement de la session...';
+
             try {
                 const data = await callSessionEndpoint(sessionRoutes.load);
                 setLoading('btn-resume-session', false);
+                if (statusEl) statusEl.innerHTML = '';
+
                 if (data && data.success) {
                     loadConfigIntoForm(data.config);
                     toggleWelcomeModal(false);
@@ -691,6 +696,7 @@
                 }
             } catch (e) {
                 setLoading('btn-resume-session', false);
+                if (statusEl) statusEl.innerHTML = '';
                 showModal(e.message, 'error');
             }
         }
@@ -982,7 +988,9 @@
             h = '';
             if (s.combos) {
                 Object.entries(s.combos).forEach(([k, demand]) => {
-                    const parts = k.split('+');
+                    // Split sur '+' et nettoyer les espaces et la casse
+                    const parts = k.split('+').map(p => p.trim().toUpperCase());
+
                     if (parts.length === 2) {
                         const m1 = parts[0].trim().toUpperCase();
                         const m2 = parts[1].trim().toUpperCase();
@@ -990,12 +998,20 @@
                         // ON CALCULE L'INTERSECTION PAR CLASSE
                         let inter = 0;
                         currentStructure.classes.forEach(cls => {
-                            const v1 = parseInt(cls.quotas[m1] || 0);
-                            const v2 = parseInt(cls.quotas[m2] || 0);
+                            // Normaliser les clés des quotas en majuscules pour la comparaison
+                            const quotasUpper = {};
+                            Object.keys(cls.quotas).forEach(key => {
+                                quotasUpper[key.toUpperCase()] = cls.quotas[key];
+                            });
+
+                            const v1 = parseInt(quotasUpper[m1] || 0);
+                            const v2 = parseInt(quotasUpper[m2] || 0);
+
                             // Le nombre de places valides pour le couple est le minimum des deux
+                            // (On ne peut placer un élève ESP+LATIN que s'il y a des places ESP ET LATIN)
                             inter += Math.min(v1, v2);
                         });
-                        
+
                         h += renderRow(k, demand, inter);
                     }
                 });

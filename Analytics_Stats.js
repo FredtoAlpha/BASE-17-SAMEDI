@@ -160,17 +160,56 @@ function calculerOptions(rows, optIdx, lv2Idx) {
  */
 function calculerCombos(rows, lv2Idx, optIdx) {
   const combos = {};
+  const debugDetails = [];
 
-  rows.forEach(row => {
-    const lv2 = String(row[lv2Idx] || '').trim().toUpperCase();
-    const opt = String(row[optIdx] || '').trim().toUpperCase();
+  // Helper : découpe commune pour LV2 et options (gère "/", ",", "+"…)
+  const splitList = (value) => {
+    return String(value || '')
+      .toUpperCase()
+      .split(/[+,;/]|\s+\+\s+|\s*\/\s*/)
+      .map(v => v.trim())
+      .filter(Boolean);
+  };
 
-    // Profil double = Tout couple LV2 + Option
-    if (lv2 && opt) {
-      const combo = `${lv2} + ${opt}`;
-      combos[combo] = (combos[combo] || 0) + 1;
+  // Si les colonnes n'existent pas, aucun calcul possible (évite de lire la dernière colonne avec l'index -1)
+  if (lv2Idx === -1 || optIdx === -1) return combos;
+
+  rows.forEach((row, index) => {
+    const lv2List = splitList(row[lv2Idx]);
+    const options = splitList(row[optIdx]);
+
+    if (lv2List.length && options.length) {
+      // 🔒 Sécurisation : ne compter chaque couple qu'une seule fois par élève,
+      // même si l'option ou la LV2 est saisie en double ou avec des séparateurs multiples.
+      const seenForRow = new Set();
+
+      lv2List.forEach(lv2 => {
+        options.forEach(opt => {
+          if (!opt || !lv2 || opt === lv2) return; // Pas de combo si option vide ou identique à la LV2
+
+          const combo = `${lv2} + ${opt}`;
+          if (seenForRow.has(combo)) return; // évite de compter deux fois la même paire pour un élève
+
+          combos[combo] = (combos[combo] || 0) + 1;
+          seenForRow.add(combo);
+        });
+      });
+
+      // Stocker une trace détaillée (index de ligne + listes normalisées + combos retenus)
+      debugDetails.push({
+        ligne: index + 2, // +2 pour compter l'en-tête + index 0-based
+        lv2: lv2List,
+        options,
+        combos: Array.from(seenForRow)
+      });
     }
   });
+
+  // Log limité pour investiguer l'affichage des profils doubles
+  const maxRows = 50;
+  const preview = debugDetails.slice(0, maxRows);
+  Logger.log(`🔎 Trace combos (premières ${preview.length} lignes contenant LV2+option, max ${maxRows}): ${JSON.stringify(preview)}`);
+  Logger.log(`📊 Totaux combos calculés: ${JSON.stringify(combos)}`);
 
   return combos;
 }
@@ -182,18 +221,38 @@ function calculerCombos(rows, lv2Idx, optIdx) {
 function calculerComptagesGlobaux(rows, lv2Idx, optIdx) {
   const globalCounts = {};
 
-  rows.forEach(row => {
-    const lv2 = String(row[lv2Idx] || '').trim().toUpperCase();
-    const opt = String(row[optIdx] || '').trim().toUpperCase();
+  // Recycle la même logique de découpe que pour les combos pour éviter les écarts
+  const splitList = (value) => {
+    return String(value || '')
+      .toUpperCase()
+      .split(/[+,;/]|\s+\+\s+|\s*\/\s*/)
+      .map(v => v.trim())
+      .filter(Boolean);
+  };
 
-    // Ajouter LV2
-    if (lv2) {
-      globalCounts[lv2] = (globalCounts[lv2] || 0) + 1;
+  rows.forEach(row => {
+    const lv2List = splitList(row[lv2Idx]);
+    const options = splitList(row[optIdx]);
+
+    // Ajouter LV2 (déduplication intra-ligne pour éviter 2× ESP en double saisie)
+    if (lv2List.length) {
+      const seenLv2 = new Set();
+      lv2List.forEach(lv2 => {
+        if (!lv2 || seenLv2.has(lv2)) return;
+        globalCounts[lv2] = (globalCounts[lv2] || 0) + 1;
+        seenLv2.add(lv2);
+      });
     }
 
-    // Ajouter Option (si différente de LV2, pour éviter double compte si erreur saisie)
-    if (opt && opt !== lv2) {
-      globalCounts[opt] = (globalCounts[opt] || 0) + 1;
+    // Ajouter chaque option, dédupliquée au sein de la ligne et sans double compter LV2
+    if (options.length) {
+      const seenOpts = new Set();
+      options.forEach(opt => {
+        if (!opt || seenOpts.has(opt)) return;
+        if (lv2List.includes(opt)) return; // évite de double compter une LV2 saisie aussi en option
+        globalCounts[opt] = (globalCounts[opt] || 0) + 1;
+        seenOpts.add(opt);
+      });
     }
   });
 

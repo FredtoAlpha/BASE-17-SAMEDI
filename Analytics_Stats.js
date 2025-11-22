@@ -160,28 +160,30 @@ function calculerOptions(rows, optIdx, lv2Idx) {
  */
 function calculerCombos(rows, lv2Idx, optIdx) {
   const combos = {};
+  const debugDetails = [];
 
   // Helper : split multi-options "LATIN / CHAV" → ["LATIN", "CHAV"]
   const splitOptions = (optString) => {
     return String(optString || '')
       .toUpperCase()
-      .split(/[+,;/]|\s+\+\s+/)
+      .split(/[+,;/]|\s+\+\s+|\s*\/\s*/)
       .map(o => o.trim())
       .filter(Boolean);
   };
 
-  rows.forEach(row => {
+  // Si les colonnes n'existent pas, aucun calcul possible (évite de lire la dernière colonne avec l'index -1)
+  if (lv2Idx === -1 || optIdx === -1) return combos;
+
+  rows.forEach((row, index) => {
     const lv2 = String(row[lv2Idx] || '').trim().toUpperCase();
     const options = splitOptions(row[optIdx]);
 
-    // Profil double = tout couple LV2 + Option (chaque option est comptée séparément)
     if (lv2 && options.length) {
       // 🔒 Sécurisation : ne compter chaque couple qu'une seule fois par élève,
       // même si l'option est saisie en double ou avec des séparateurs multiples.
       const seenForRow = new Set();
 
-      options.forEach(optRaw => {
-        const opt = optRaw.trim().toUpperCase();
+      options.forEach(opt => {
         if (!opt || opt === lv2) return; // Pas de combo si option vide ou identique à la LV2
 
         const combo = `${lv2} + ${opt}`;
@@ -190,8 +192,22 @@ function calculerCombos(rows, lv2Idx, optIdx) {
         combos[combo] = (combos[combo] || 0) + 1;
         seenForRow.add(combo);
       });
+
+      // Stocker une trace détaillée (index de ligne + listes normalisées + combos retenus)
+      debugDetails.push({
+        ligne: index + 2, // +2 pour compter l'en-tête + index 0-based
+        lv2,
+        options,
+        combos: Array.from(seenForRow)
+      });
     }
   });
+
+  // Log limité pour investiguer l'affichage des profils doubles
+  const maxRows = 50;
+  const preview = debugDetails.slice(0, maxRows);
+  Logger.log(`🔎 Trace combos (premières ${preview.length} lignes contenant LV2+option, max ${maxRows}): ${JSON.stringify(preview)}`);
+  Logger.log(`📊 Totaux combos calculés: ${JSON.stringify(combos)}`);
 
   return combos;
 }
@@ -207,7 +223,7 @@ function calculerComptagesGlobaux(rows, lv2Idx, optIdx) {
   const splitOptions = (optString) => {
     return String(optString || '')
       .toUpperCase()
-      .split(/[+,;/]|\s+\+\s+/)
+      .split(/[+,;/]|\s+\+\s+|\s*\/\s*/)
       .map(o => o.trim())
       .filter(Boolean);
   };

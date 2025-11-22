@@ -162,8 +162,8 @@ function calculerCombos(rows, lv2Idx, optIdx) {
   const combos = {};
   const debugDetails = [];
 
-  // Helper : découpe commune pour LV2 et options (gère "/", ",", "+"…)
-  const splitList = (value) => {
+  // Helper : découpe uniquement les options (LV2 = une valeur unique)
+  const splitOptions = (value) => {
     return String(value || '')
       .toUpperCase()
       .split(/[+,;/]|\s+\+\s+|\s*\/\s*/)
@@ -175,30 +175,28 @@ function calculerCombos(rows, lv2Idx, optIdx) {
   if (lv2Idx === -1 || optIdx === -1) return combos;
 
   rows.forEach((row, index) => {
-    const lv2List = splitList(row[lv2Idx]);
-    const options = splitList(row[optIdx]);
+    const lv2 = String(row[lv2Idx] || '').trim().toUpperCase();
+    const options = splitOptions(row[optIdx]);
 
-    if (lv2List.length && options.length) {
+    if (lv2 && options.length) {
       // 🔒 Sécurisation : ne compter chaque couple qu'une seule fois par élève,
-      // même si l'option ou la LV2 est saisie en double ou avec des séparateurs multiples.
+      // même si l'option est saisie en double ou avec des séparateurs multiples.
       const seenForRow = new Set();
 
-      lv2List.forEach(lv2 => {
-        options.forEach(opt => {
-          if (!opt || !lv2 || opt === lv2) return; // Pas de combo si option vide ou identique à la LV2
+      options.forEach(opt => {
+        if (!opt || opt === lv2) return; // Pas de combo si option vide ou identique à la LV2
 
-          const combo = `${lv2} + ${opt}`;
-          if (seenForRow.has(combo)) return; // évite de compter deux fois la même paire pour un élève
+        const combo = `${lv2} + ${opt}`;
+        if (seenForRow.has(combo)) return; // évite de compter deux fois la même paire pour un élève
 
-          combos[combo] = (combos[combo] || 0) + 1;
-          seenForRow.add(combo);
-        });
+        combos[combo] = (combos[combo] || 0) + 1;
+        seenForRow.add(combo);
       });
 
-      // Stocker une trace détaillée (index de ligne + listes normalisées + combos retenus)
+      // Stocker une trace détaillée (index de ligne + LV2 normalisée + combos retenus)
       debugDetails.push({
         ligne: index + 2, // +2 pour compter l'en-tête + index 0-based
-        lv2: lv2List,
+        lv2,
         options,
         combos: Array.from(seenForRow)
       });

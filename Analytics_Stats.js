@@ -176,9 +176,19 @@ function calculerCombos(rows, lv2Idx, optIdx) {
 
     // Profil double = tout couple LV2 + Option (chaque option est comptée séparément)
     if (lv2 && options.length) {
-      options.forEach(opt => {
+      // 🔒 Sécurisation : ne compter chaque couple qu'une seule fois par élève,
+      // même si l'option est saisie en double ou avec des séparateurs multiples.
+      const seenForRow = new Set();
+
+      options.forEach(optRaw => {
+        const opt = optRaw.trim().toUpperCase();
+        if (!opt || opt === lv2) return; // Pas de combo si option vide ou identique à la LV2
+
         const combo = `${lv2} + ${opt}`;
+        if (seenForRow.has(combo)) return; // évite de compter deux fois la même paire pour un élève
+
         combos[combo] = (combos[combo] || 0) + 1;
+        seenForRow.add(combo);
       });
     }
   });
@@ -193,18 +203,32 @@ function calculerCombos(rows, lv2Idx, optIdx) {
 function calculerComptagesGlobaux(rows, lv2Idx, optIdx) {
   const globalCounts = {};
 
+  // Recycle la même logique de découpe que pour les combos pour éviter les écarts
+  const splitOptions = (optString) => {
+    return String(optString || '')
+      .toUpperCase()
+      .split(/[+,;/]|\s+\+\s+/)
+      .map(o => o.trim())
+      .filter(Boolean);
+  };
+
   rows.forEach(row => {
     const lv2 = String(row[lv2Idx] || '').trim().toUpperCase();
-    const opt = String(row[optIdx] || '').trim().toUpperCase();
+    const options = splitOptions(row[optIdx]);
 
     // Ajouter LV2
     if (lv2) {
       globalCounts[lv2] = (globalCounts[lv2] || 0) + 1;
     }
 
-    // Ajouter Option (si différente de LV2, pour éviter double compte si erreur saisie)
-    if (opt && opt !== lv2) {
-      globalCounts[opt] = (globalCounts[opt] || 0) + 1;
+    // Ajouter chaque option, dédupliquée au sein de la ligne et sans double compter LV2
+    if (options.length) {
+      const seenOpts = new Set();
+      options.forEach(opt => {
+        if (!opt || opt === lv2 || seenOpts.has(opt)) return;
+        globalCounts[opt] = (globalCounts[opt] || 0) + 1;
+        seenOpts.add(opt);
+      });
     }
   });
 

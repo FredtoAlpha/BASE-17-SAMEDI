@@ -162,12 +162,12 @@ function calculerCombos(rows, lv2Idx, optIdx) {
   const combos = {};
   const debugDetails = [];
 
-  // Helper : split multi-options "LATIN / CHAV" → ["LATIN", "CHAV"]
-  const splitOptions = (optString) => {
-    return String(optString || '')
+  // Helper : découpe commune pour LV2 et options (gère "/", ",", "+"…)
+  const splitList = (value) => {
+    return String(value || '')
       .toUpperCase()
       .split(/[+,;/]|\s+\+\s+|\s*\/\s*/)
-      .map(o => o.trim())
+      .map(v => v.trim())
       .filter(Boolean);
   };
 
@@ -175,28 +175,30 @@ function calculerCombos(rows, lv2Idx, optIdx) {
   if (lv2Idx === -1 || optIdx === -1) return combos;
 
   rows.forEach((row, index) => {
-    const lv2 = String(row[lv2Idx] || '').trim().toUpperCase();
-    const options = splitOptions(row[optIdx]);
+    const lv2List = splitList(row[lv2Idx]);
+    const options = splitList(row[optIdx]);
 
-    if (lv2 && options.length) {
+    if (lv2List.length && options.length) {
       // 🔒 Sécurisation : ne compter chaque couple qu'une seule fois par élève,
-      // même si l'option est saisie en double ou avec des séparateurs multiples.
+      // même si l'option ou la LV2 est saisie en double ou avec des séparateurs multiples.
       const seenForRow = new Set();
 
-      options.forEach(opt => {
-        if (!opt || opt === lv2) return; // Pas de combo si option vide ou identique à la LV2
+      lv2List.forEach(lv2 => {
+        options.forEach(opt => {
+          if (!opt || !lv2 || opt === lv2) return; // Pas de combo si option vide ou identique à la LV2
 
-        const combo = `${lv2} + ${opt}`;
-        if (seenForRow.has(combo)) return; // évite de compter deux fois la même paire pour un élève
+          const combo = `${lv2} + ${opt}`;
+          if (seenForRow.has(combo)) return; // évite de compter deux fois la même paire pour un élève
 
-        combos[combo] = (combos[combo] || 0) + 1;
-        seenForRow.add(combo);
+          combos[combo] = (combos[combo] || 0) + 1;
+          seenForRow.add(combo);
+        });
       });
 
       // Stocker une trace détaillée (index de ligne + listes normalisées + combos retenus)
       debugDetails.push({
         ligne: index + 2, // +2 pour compter l'en-tête + index 0-based
-        lv2,
+        lv2: lv2List,
         options,
         combos: Array.from(seenForRow)
       });
@@ -220,28 +222,34 @@ function calculerComptagesGlobaux(rows, lv2Idx, optIdx) {
   const globalCounts = {};
 
   // Recycle la même logique de découpe que pour les combos pour éviter les écarts
-  const splitOptions = (optString) => {
-    return String(optString || '')
+  const splitList = (value) => {
+    return String(value || '')
       .toUpperCase()
       .split(/[+,;/]|\s+\+\s+|\s*\/\s*/)
-      .map(o => o.trim())
+      .map(v => v.trim())
       .filter(Boolean);
   };
 
   rows.forEach(row => {
-    const lv2 = String(row[lv2Idx] || '').trim().toUpperCase();
-    const options = splitOptions(row[optIdx]);
+    const lv2List = splitList(row[lv2Idx]);
+    const options = splitList(row[optIdx]);
 
-    // Ajouter LV2
-    if (lv2) {
-      globalCounts[lv2] = (globalCounts[lv2] || 0) + 1;
+    // Ajouter LV2 (déduplication intra-ligne pour éviter 2× ESP en double saisie)
+    if (lv2List.length) {
+      const seenLv2 = new Set();
+      lv2List.forEach(lv2 => {
+        if (!lv2 || seenLv2.has(lv2)) return;
+        globalCounts[lv2] = (globalCounts[lv2] || 0) + 1;
+        seenLv2.add(lv2);
+      });
     }
 
     // Ajouter chaque option, dédupliquée au sein de la ligne et sans double compter LV2
     if (options.length) {
       const seenOpts = new Set();
       options.forEach(opt => {
-        if (!opt || opt === lv2 || seenOpts.has(opt)) return;
+        if (!opt || seenOpts.has(opt)) return;
+        if (lv2List.includes(opt)) return; // évite de double compter une LV2 saisie aussi en option
         globalCounts[opt] = (globalCounts[opt] || 0) + 1;
         seenOpts.add(opt);
       });

@@ -589,7 +589,8 @@
         // ===================================================================
         window.onload = function() {
             console.log("🚀 Console Pilotage V3 chargée");
-            goTo(1); // Force l'affichage immédiat pour éviter l'écran blanc
+            toggleWelcomeModal(true); // Afficher le panneau immédiatement
+            goTo(1); // Prépare l'interface en arrière-plan
             initializeWelcomeFlow();
         };
 
@@ -598,12 +599,10 @@
                 const status = await getSessionStatus();
                 const btnResume = document.getElementById('btn-resume-session');
                 if (btnResume) btnResume.style.display = status.hasBackup ? 'flex' : 'none';
-                
-                if (status.hasBackup) {
-                    toggleWelcomeModal(true);
-                }
             } catch (e) {
                 console.error("Erreur session", e);
+                const btnResume = document.getElementById('btn-resume-session');
+                if (btnResume) btnResume.style.display = 'none';
             }
         }
 
@@ -985,8 +984,8 @@
                 Object.entries(s.combos).forEach(([k, demand]) => {
                     const parts = k.split('+');
                     if (parts.length === 2) {
-                        const m1 = parts[0].trim();
-                        const m2 = parts[1].trim();
+                        const m1 = parts[0].trim().toUpperCase();
+                        const m2 = parts[1].trim().toUpperCase();
                         
                         // ON CALCULE L'INTERSECTION PAR CLASSE
                         let inter = 0;

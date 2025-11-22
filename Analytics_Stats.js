@@ -161,14 +161,25 @@ function calculerOptions(rows, optIdx, lv2Idx) {
 function calculerCombos(rows, lv2Idx, optIdx) {
   const combos = {};
 
+  // Helper : split multi-options "LATIN / CHAV" → ["LATIN", "CHAV"]
+  const splitOptions = (optString) => {
+    return String(optString || '')
+      .toUpperCase()
+      .split(/[+,;/]|\s+\+\s+/)
+      .map(o => o.trim())
+      .filter(Boolean);
+  };
+
   rows.forEach(row => {
     const lv2 = String(row[lv2Idx] || '').trim().toUpperCase();
-    const opt = String(row[optIdx] || '').trim().toUpperCase();
+    const options = splitOptions(row[optIdx]);
 
-    // Profil double = Tout couple LV2 + Option
-    if (lv2 && opt) {
-      const combo = `${lv2} + ${opt}`;
-      combos[combo] = (combos[combo] || 0) + 1;
+    // Profil double = tout couple LV2 + Option (chaque option est comptée séparément)
+    if (lv2 && options.length) {
+      options.forEach(opt => {
+        const combo = `${lv2} + ${opt}`;
+        combos[combo] = (combos[combo] || 0) + 1;
+      });
     }
   });
 

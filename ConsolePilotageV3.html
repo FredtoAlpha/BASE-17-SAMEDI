@@ -589,21 +589,26 @@
         // ===================================================================
         window.onload = function() {
             console.log("🚀 Console Pilotage V3 chargée");
-            goTo(1); // Force l'affichage immédiat pour éviter l'écran blanc
+            toggleWelcomeModal(true); // Affiche immédiatement l'écran de choix
             initializeWelcomeFlow();
+            goTo(1); // Force l'affichage immédiat pour éviter l'écran blanc
         };
 
         async function initializeWelcomeFlow() {
+            const statusEl = document.getElementById('welcome-status');
+            const btnResume = document.getElementById('btn-resume-session');
+            if (statusEl) statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Vérification des sessions enregistrées...';
+
             try {
                 const status = await getSessionStatus();
-                const btnResume = document.getElementById('btn-resume-session');
                 if (btnResume) btnResume.style.display = status.hasBackup ? 'flex' : 'none';
-                
-                if (status.hasBackup) {
-                    toggleWelcomeModal(true);
-                }
+                if (statusEl) statusEl.innerHTML = status.hasBackup
+                    ? '<i class="fas fa-check-circle"></i> Session précédente détectée.'
+                    : '<i class="fas fa-info-circle"></i> Aucune session précédente trouvée. Démarrez une nouvelle configuration.';
             } catch (e) {
                 console.error("Erreur session", e);
+                if (btnResume) btnResume.style.display = 'none';
+                if (statusEl) statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Impossible de vérifier les sessions. Vous pouvez démarrer une nouvelle configuration.';
             }
         }
 
